@@ -24,7 +24,6 @@ jobs:
         run: |
           docker build -t tupychka.azurecr.io/vote:latest ./vote
           docker push tupychka.azurecr.io/vote:latest
-
       - name: Build and push result
         run: |
           docker build -t tupychka.azurecr.io/result:latest ./result
