@@ -1,0 +1,67 @@
+name: CI/CD Voting App
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # 2. Login to Azure Container Registry
+      - name: Log in to ACR
+        uses: docker/login-action@v2
+        with:
+          registry: tupychka.azurecr.io
+          username: ${{ secrets.AZURE_CLIENT_ID }}
+          password: ${{ secrets.AZURE_CLIENT_SECRET }}
+
+      # 3. Build and push vote/result/worker images
+      - name: Build and push vote
+        run: |
+          docker build -t tupychka.azurecr.io/vote:latest ./vote
+          docker push tupychka.azurecr.io/vote:latest
+
+      - name: Build and push result
+        run: |
+          docker build -t tupychka.azurecr.io/result:latest ./result
+          docker push tupychka.azurecr.io/result:latest
+
+      - name: Build and push worker
+        run: |
+          docker build -t tupychka.azurecr.io/worker:latest ./worker
+          docker push tupychka.azurecr.io/worker:latest
+
+      # 4. Modify docker-compose.yml to use pushed images
+      - name: Update docker-compose.yml
+        run: |
+          sed -i 's|build: ./vote|image: tupychka.azurecr.io/vote:latest|' docker-compose.yml
+          sed -i 's|build: ./result|image: tupychka.azurecr.io/result:latest|' docker-compose.yml
+          sed -i 's|build: ./worker|image: tupychka.azurecr.io/worker:latest|' docker-compose.yml
+
+      # 5. Copy compose to VM via SSH
+      - name: Copy docker-compose to VM
+        uses: appleboy/scp-action@v0.1.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          source: docker-compose.yml
+          target: ~/voting-app/
+
+      # 6. Deploy on VM
+      - name: Deploy on VM
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            cd ~/voting-app
+            docker compose pull
+            docker compose up -d --remove-orphans
