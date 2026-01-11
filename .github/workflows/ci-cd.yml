@@ -1,5 +1,4 @@
 name: CI/CD Voting App
-
 on:
   push:
     branches:
